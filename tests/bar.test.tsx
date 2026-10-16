@@ -7,6 +7,13 @@ const props = (hasSurvey: boolean) => ({
 
 type Remote = { via: 'app' | 'command' | 'none'; on: boolean; calls: number; lag?: number; allowed?: boolean; reads?: number }
 
+type Drawing = { findAll: (q: { type?: string }) => Promise<readonly { props: Record<string, unknown> }[]> }
+
+async function dot(ui: Drawing) {
+  const svg = (await ui.findAll({ type: 'Svg' })).find(el => String(el.props.alt).startsWith('Remote'))
+  return /fill="(#[0-9A-F]+)"/i.exec(String(svg?.props.source))?.[1]
+}
+
 function world(on: On, remote: Remote) {
   const clock = mock.clock(on, { now: Date.UTC(2026, 9, 16, 12, 0) })
   on('session.usage', ($, _e, _next) => ({ value: {
@@ -71,11 +78,11 @@ for (const via of ['app', 'command'] as const) {
 
     const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
     expect(await ui.find({ key: 'remote', text: 'Remote' })).toBeDefined()
-    expect((await ui.find({ type: 'Text', text: '●' }))?.props).toMatchObject({ dimColor: true })
+    expect(await dot(ui)).toBe('#A3A3A3')
     await ui.press({ key: 'remote' })
     expect(remote.calls).toBe(1)
     expect(remote.on).toBe(true)
-    expect((await ui.find({ type: 'Text', text: '●' }))?.props).toMatchObject({ color: '#3FA266' })
+    expect(await dot(ui)).toBe('#3FA266')
     await ui.unmount()
   })
 }
@@ -88,11 +95,11 @@ test('the dot stays yellow while the app is still connecting', async ($, on) => 
   const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
   remote.lag = 3
   await ui.press({ key: 'remote' })
-  expect((await ui.find({ type: 'Text', text: '●' }))?.props).toMatchObject({ color: '#D9A441' })
+  expect(await dot(ui)).toBe('#D9A441')
   await clock.advance(2000)
-  expect((await ui.find({ type: 'Text', text: '●' }))?.props).toMatchObject({ color: '#D9A441' })
+  expect(await dot(ui)).toBe('#D9A441')
   await clock.advance(4000)
-  expect((await ui.find({ type: 'Text', text: '●' }))?.props).toMatchObject({ color: '#3FA266' })
+  expect(await dot(ui)).toBe('#3FA266')
   await ui.unmount()
 })
 
