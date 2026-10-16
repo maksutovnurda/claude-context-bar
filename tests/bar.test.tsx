@@ -7,11 +7,10 @@ const props = (hasSurvey: boolean) => ({
 
 type Remote = { via: 'app' | 'command' | 'none'; on: boolean; calls: number; lag?: number; allowed?: boolean; reads?: number }
 
-type Drawing = { findAll: (q: { type?: string }) => Promise<readonly { props: Record<string, unknown> }[]> }
+type Drawing = { find: (q: { key?: string }) => Promise<{ text?: string } | undefined> }
 
 async function dot(ui: Drawing) {
-  const svg = (await ui.findAll({ type: 'Svg' })).find(el => String(el.props.alt).startsWith('Remote'))
-  return /fill="(#[0-9A-F]+)"/i.exec(String(svg?.props.source))?.[1]
+  return (await ui.find({ key: 'remote' }))?.text?.split(' ')[0]
 }
 
 function world(on: On, remote: Remote) {
@@ -78,11 +77,11 @@ for (const via of ['app', 'command'] as const) {
 
     const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
     expect(await ui.find({ key: 'remote', text: 'Remote' })).toBeDefined()
-    expect(await dot(ui)).toBe('#A3A3A3')
+    expect(await dot(ui)).toBe('⚪')
     await ui.press({ key: 'remote' })
     expect(remote.calls).toBe(1)
     expect(remote.on).toBe(true)
-    expect(await dot(ui)).toBe('#3FA266')
+    expect(await dot(ui)).toBe('🟢')
     await ui.unmount()
   })
 }
@@ -95,11 +94,11 @@ test('the dot stays yellow while the app is still connecting', async ($, on) => 
   const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
   remote.lag = 3
   await ui.press({ key: 'remote' })
-  expect(await dot(ui)).toBe('#D9A441')
+  expect(await dot(ui)).toBe('🟡')
   await clock.advance(2000)
-  expect(await dot(ui)).toBe('#D9A441')
+  expect(await dot(ui)).toBe('🟡')
   await clock.advance(4000)
-  expect(await dot(ui)).toBe('#3FA266')
+  expect(await dot(ui)).toBe('🟢')
   await ui.unmount()
 })
 
