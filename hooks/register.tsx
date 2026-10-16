@@ -6,9 +6,13 @@ const snap = { plugin: 'context-bar', key: 'snap' } as const
 
 const ACCENT = '#D97757'
 const WARN = '#C2413A'
-// The desktop draws a Button as its native chip, in its own text colour, whatever
-// colour the tree asks for: the state rides in the label as a coloured emoji.
-const DOT = { on: '🟢', connecting: '🟡', off: '⚪' } as const
+const ON = '#3FA266'
+const CONNECTING = '#D9A441'
+const OFF = '#A3A3A3'
+
+// The desktop draws a Button's children in its own colour, so the dot is a drawing beside it.
+const dot = (color: string) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="${color}"/></svg>`
 const BAR = 140
 
 const short = (n: number) =>
@@ -125,6 +129,7 @@ export const register: Register = on => {
         : `·  лимит ${s.fiveHour}%`
 
     const isOn = s.remote === 'on' || s.remote === 'connecting'
+    const dotColor = s.remote === 'on' ? ON : s.remote === 'connecting' ? CONNECTING : OFF
     const toggle = async () => {
       pending = { target: isOn ? 'off' : 'on', until: (await $.clock.now()) + 20_000 }
       await $.state.set(snap, { ...s, remote: isOn ? 'off' : 'connecting' })
@@ -161,7 +166,12 @@ export const register: Register = on => {
         </Box>
         {s.remote !== null
           ? (
-            <Button key="remote" plain dimColor={!isOn} onPress={toggle} label={`${DOT[s.remote]} Remote`} />
+            <Box key="remote-row" flexDirection="row" alignItems="center" gap={1}>
+              {Svg
+                ? <Svg source={dot(dotColor)} alt={`Remote Control: ${s.remote}`} width={8} height={8} />
+                : <Text color={s.remote === 'off' ? undefined : dotColor} dimColor={!isOn}>●</Text>}
+              <Button key="remote" plain dimColor={!isOn} onPress={toggle} label="Remote" />
+            </Box>
           )
           : null}
       </Box>
