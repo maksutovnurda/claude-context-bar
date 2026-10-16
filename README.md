@@ -28,8 +28,11 @@ claude plugin install context-bar --marketplace maksutovnurda/claude-context-bar
 
 ## Тумблер Remote в десктопе
 
-В auto-режиме нажатие кнопки отклоняется, пока нет правила разрешения. Добавьте в `~/.claude/settings.json`:
+Тумблер появляется только если разрешено читать состояние сессии; без правила строка не спрашивает разрешений и тумблер скрыт. Добавьте в `~/.claude/settings.json`:
 
 ```json
-{ "permissions": { "allow": ["mcp__ccd_session_mgmt__set_remote_control"] } }
+{ "permissions": { "allow": [
+  "mcp__ccd_session_mgmt__get_session",
+  "mcp__ccd_session_mgmt__set_remote_control"
+] } }
 ```

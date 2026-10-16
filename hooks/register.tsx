@@ -31,16 +31,25 @@ const bar = (percent: number) => {
 
 type Remote = Pick<Snapshot, 'remote' | 'remoteVia'>
 
+const GET_SESSION = 'mcp__ccd_session_mgmt__get_session'
+
 // The desktop app owns Remote Control: get_session("self") reports remoteControlState.
+// The bar polls it, so it reads it only where a rule already allows the call: a poll
+// must never put a permission dialog in front of the person.
 // In a terminal, /remote-control is the toggle; its description reads "Disconnect Remote Control" while connected.
 async function remoteState($: EngineInterface): Promise<Remote> {
   try {
-    const r = await $.tool.call({ tool: 'mcp__ccd_session_mgmt__get_session', session_id: 'self' })
-    const state = r.text ? /"remoteControlState"\s*:\s*"(\w+)"/.exec(r.text)?.[1] : undefined
-    if (!r.isError && !r.deny && state) {
-      return state === 'on' || state === 'off' || state === 'connecting'
-        ? { remote: state, remoteVia: 'app' }
-        : { remote: null, remoteVia: null }
+    const isApp = (await $.tool.list()).some(t => t.name === GET_SESSION)
+    if (isApp) {
+      const { decision } = await $.tool.check({ tool: GET_SESSION, input: { session_id: 'self' } })
+      if (decision !== 'allow') return { remote: null, remoteVia: null }
+      const r = await $.tool.call({ tool: GET_SESSION, session_id: 'self' })
+      const state = r.text ? /"remoteControlState"\s*:\s*"(\w+)"/.exec(r.text)?.[1] : undefined
+      if (!r.isError && !r.deny && state) {
+        return state === 'on' || state === 'off' || state === 'connecting'
+          ? { remote: state, remoteVia: 'app' }
+          : { remote: null, remoteVia: null }
+      }
     }
   } catch {
     // not in the desktop app: no such tool

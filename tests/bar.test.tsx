@@ -5,7 +5,7 @@ const props = (hasSurvey: boolean) => ({
   hasSurvey, isWorking: false, maxRows: 10, bodyColumns: 100, scroll: { offset: 0, bodyRows: 10 }, view: {},
 })
 
-type Remote = { via: 'app' | 'command' | 'none'; on: boolean; calls: number; lag?: number }
+type Remote = { via: 'app' | 'command' | 'none'; on: boolean; calls: number; lag?: number; allowed?: boolean; reads?: number }
 
 function world(on: On, remote: Remote) {
   const clock = mock.clock(on, { now: Date.UTC(2026, 9, 16, 12, 0) })
@@ -15,9 +15,14 @@ function world(on: On, remote: Remote) {
     rateLimits: [{ kind: 'five_hour', percentUsed: 23.4, resetsAt: new Date(Date.UTC(2026, 9, 16, 14, 14)).toISOString() }],
     cost: { usd: 1.237 },
   } }))
+  on('tool.list', ($, _e, _next) => ({ value: remote.via === 'app'
+    ? [{ name: 'mcp__ccd_session_mgmt__get_session', description: '', mcp: true }, { name: 'mcp__ccd_session_mgmt__set_remote_control', description: '', mcp: true }]
+    : [] }))
+  on('tool.check', ($, e, _next) => ({ decision: e.tool === 'mcp__ccd_session_mgmt__get_session' && remote.allowed === false ? 'ask' : 'allow' }))
   on('tool.call', ($, e, _next) => {
     if (remote.via !== 'app') return { deny: 'No such tool available' }
     if (e.tool === 'mcp__ccd_session_mgmt__get_session') {
+      remote.reads = (remote.reads ?? 0) + 1
       const shown = remote.lag ? (remote.lag--, !remote.on) : remote.on
       return { result: {}, text: JSON.stringify({ sessionId: 'x', remoteControlState: shown ? 'on' : 'off' }) }
     }
@@ -88,6 +93,19 @@ test('the dot stays yellow while the app is still connecting', async ($, on) => 
   expect((await ui.find({ type: 'Text', text: '●' }))?.props).toMatchObject({ color: '#D9A441' })
   await clock.advance(4000)
   expect((await ui.find({ type: 'Text', text: '●' }))?.props).toMatchObject({ color: '#3FA266' })
+  await ui.unmount()
+})
+
+test('without an allow rule the bar never asks the app, so no permission dialogs', async ($, on) => {
+  const remote: Remote = { via: 'app', on: false, calls: 0, allowed: false }
+  const clock = world(on, remote)
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+  await clock.advance(10_000)
+
+  const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
+  expect(remote.reads ?? 0).toBe(0)
+  expect(await ui.find({ key: 'remote' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: '42%  84k / 200k' })).toBeDefined()
   await ui.unmount()
 })
 
