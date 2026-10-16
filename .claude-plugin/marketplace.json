@@ -1,0 +1,13 @@
+{
+  "name": "claude-context-bar",
+  "owner": {
+    "name": "maksutovnurda"
+  },
+  "plugins": [
+    {
+      "name": "context-bar",
+      "source": "./"
+    }
+  ],
+  "description": "Строка контекста, лимита и Remote Control над полем ввода Claude Code"
+}
