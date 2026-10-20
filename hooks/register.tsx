@@ -240,11 +240,12 @@ export const register: Register = on => {
     const limitCells = s.fiveHour === null ? null : Math.max(0, Math.min(20, Math.round(s.fiveHour / 5)))
     const hot = pct >= 80
     // `≈` marks what is not a response's own figure: the local estimate of the fill, and
-    // a 5-hour reading this session did not make itself.
+    // a 5-hour reading this session did not make itself. `·` separates every group: the
+    // alt text keeps its comma, being a phrase a screen reader reads out.
     const fill = s.percent === null ? '—' : `${s.estimated ? '≈' : ''}${s.percent}%`
     const limit = s.fiveHour === null ? null
       : s.minutes !== null
-        ? `·  ${s.limitKept ? '≈' : ''}лимит ${s.fiveHour}%, сброс через ${left(s.minutes)}`
+        ? `·  ${s.limitKept ? '≈' : ''}лимит ${s.fiveHour}%  ·  сброс через ${left(s.minutes)}`
         : `·  ${s.limitKept ? '≈' : ''}лимит ${s.fiveHour}%`
 
     const isOn = s.remote === 'on' || s.remote === 'connecting'

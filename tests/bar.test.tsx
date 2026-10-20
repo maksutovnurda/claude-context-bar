@@ -63,7 +63,7 @@ test('band shows context fill and time to the limit reset, no model or cost', as
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'context-bar', surface, component: 'AbovePrompt', props: props(false) })
     expect(await ui.find({ type: 'Text', text: '42%  84k / 200k' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: 'лимит 23%, сброс через 2ч 14м' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'лимит 23%  ·  сброс через 2ч 14м' })).toBeDefined()
     expect(await ui.find({ text: 'Opus' })).toBeUndefined()
     expect(await ui.find({ text: '$' })).toBeUndefined()
     if (surface === 'desktop') expect(await ui.find({ type: 'Svg' })).toBeDefined()
@@ -202,7 +202,7 @@ test('a session of its own makes no reading: the 5-hour window is the last one k
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
 
   const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
-  expect(await ui.find({ type: 'Text', text: '\u2248лимит 23%, сброс через 2ч 14м' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '\u2248лимит 23%  ·  сброс через 2ч 14м' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -226,6 +226,6 @@ test('a turn pushes the figures: the band has them without waiting for a tick', 
     changed: ['context', 'rateLimits'],
   })
   expect(await ui.find({ type: 'Text', text: '46%  91k / 200k' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'лимит 31%, сброс через 2ч 14м' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'лимит 31%  ·  сброс через 2ч 14м' })).toBeDefined()
   await ui.unmount()
 })
