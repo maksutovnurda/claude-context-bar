@@ -39,23 +39,12 @@ const hhmm = (minutes: number) => `${pad(Math.floor(minutes / 60))}:${pad(minute
 const minutesTo = (resetsAt: number | null, now: number) =>
   resetsAt === null || resetsAt <= now ? null : Math.ceil((resetsAt - now) / 60_000)
 
-const GAP = 3
-
-const track = (percent: number, color: string, y: number) => {
+// One bar, drawn at the height of a line of caption text beside its own percent.
+const track = (percent: number, color: string) => {
   const fill = Math.max(0, Math.min(BAR, Math.round((BAR * percent) / 100)))
-  return `<rect y="${y}" width="${BAR}" height="4" rx="2" fill="#888" fill-opacity="0.18"/>`
-    + `<rect y="${y}" width="${fill}" height="4" rx="2" fill="${color}"/>`
-}
-
-// Context on top; under it, without text, the 5-hour limit.
-const barsHeight = (limit: number | null) => (limit === null ? 4 : 8 + GAP)
-
-const bars = (percent: number, limit: number | null) => {
-  const height = barsHeight(limit)
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${BAR}" height="${height}" viewBox="0 0 ${BAR} ${height}">`
-    + track(percent, percent >= 80 ? WARN : ACCENT, 0)
-    + (limit === null ? '' : track(limit, LIMIT, 4 + GAP))
-    + '</svg>'
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${BAR}" height="4" viewBox="0 0 ${BAR} 4">`
+    + `<rect width="${BAR}" height="4" rx="2" fill="#888" fill-opacity="0.18"/>`
+    + `<rect width="${fill}" height="4" rx="2" fill="${color}"/></svg>`
 }
 
 type Figures = Pick<Snapshot, 'percent' | 'tokens' | 'estimated'>
@@ -238,14 +227,12 @@ export const register: Register = on => {
     const cells = Math.min(20, Math.round(pct / 5))
     const limitCells = s.fiveHour === null ? null : Math.max(0, Math.min(20, Math.round(s.fiveHour / 5)))
     const hot = pct >= 80
-    // `≈` marks what is not a response's own figure: the local estimate of the fill, and
-    // a 5-hour reading this session did not make itself. `·` separates every group: the
-    // alt text keeps its comma, being a phrase a screen reader reads out.
+    // A row per bar, each with its own percent in the smallest text the surface has: the
+    // context fill over the 5-hour limit, so both are legible at a glance. `≈` marks what
+    // is not a response's own figure — the local estimate of the fill, and a 5-hour
+    // reading this session did not make itself.
     const fill = s.percent === null ? '—' : `${s.estimated ? '≈' : ''}${s.percent}%`
-    const limit = s.fiveHour === null ? null
-      : s.minutes !== null
-        ? `·  ${s.limitKept ? '≈' : ''}лимит ${s.fiveHour}%  ·  ${hhmm(s.minutes)}`
-        : `·  ${s.limitKept ? '≈' : ''}лимит ${s.fiveHour}%`
+    const limit = s.fiveHour === null ? null : `${s.limitKept ? '≈' : ''}${s.fiveHour}%`
 
     const isOn = s.remote === 'on' || s.remote === 'connecting'
     const dotColor = s.remote === 'on' ? ON : s.remote === 'connecting' ? CONNECTING : OFF
@@ -274,29 +261,29 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="row" alignItems="center" justifyContent="space-between" paddingX={1}>
-        <Box flexDirection="row" alignItems="center" gap={1}>
-          {Svg
+        <Box flexDirection="column">
+          <Box key="fill" flexDirection="row" alignItems="center" gap={1}>
+            {Svg
+              ? <Svg source={track(pct, hot ? WARN : ACCENT)} alt={`контекст ${pct}%`} width={BAR} height={4} />
+              : <Text color={hot ? 'error' : 'claude'}>{'━'.repeat(cells)}<Text dimColor>{'━'.repeat(20 - cells)}</Text></Text>}
+            <Text size="caption" tabular color={hot ? 'error' : undefined} dimColor={!hot}>
+              {fill}
+              <Text dimColor>{s.tokens !== null ? `  ${short(s.tokens)}` : ''}</Text>
+            </Text>
+          </Box>
+          {limit !== null && limitCells !== null
             ? (
-              <Svg
-                source={bars(pct, s.fiveHour)}
-                alt={s.fiveHour === null ? `контекст ${pct}%` : `контекст ${pct}%, лимит ${s.fiveHour}%`}
-                width={BAR}
-                height={barsHeight(s.fiveHour)}
-              />
-            )
-            : (
-              <Box flexDirection="column">
-                <Text color={hot ? 'error' : 'claude'}>{'━'.repeat(cells)}<Text dimColor>{'━'.repeat(20 - cells)}</Text></Text>
-                {limitCells !== null
-                  ? <Text color={LIMIT}>{'━'.repeat(limitCells)}<Text dimColor>{'━'.repeat(20 - limitCells)}</Text></Text>
-                  : null}
+              <Box key="limit" flexDirection="row" alignItems="center" gap={1}>
+                {Svg
+                  ? <Svg source={track(s.fiveHour ?? 0, LIMIT)} alt={`лимит ${s.fiveHour}%`} width={BAR} height={4} />
+                  : <Text color={LIMIT}>{'━'.repeat(limitCells)}<Text dimColor>{'━'.repeat(20 - limitCells)}</Text></Text>}
+                <Text size="caption" tabular dimColor>
+                  {limit}
+                  {s.minutes !== null ? `  ${hhmm(s.minutes)}` : ''}
+                </Text>
               </Box>
-            )}
-          <Text size="caption" tabular color={hot ? 'error' : undefined} dimColor={!hot}>
-            {fill}
-            <Text dimColor>{s.tokens !== null ? `  ${short(s.tokens)}` : ''}</Text>
-          </Text>
-          {limit !== null ? <Text size="caption" tabular dimColor>{limit}</Text> : null}
+            )
+            : null}
         </Box>
         {s.remote !== null
           ? (

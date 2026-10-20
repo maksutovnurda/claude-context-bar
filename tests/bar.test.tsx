@@ -63,7 +63,7 @@ test('band shows context fill and time to the limit reset, no model or cost', as
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'context-bar', surface, component: 'AbovePrompt', props: props(false) })
     expect(await ui.find({ type: 'Text', text: '42%  84k' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: 'лимит 23%  ·  02:14' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '23%  02:14' })).toBeDefined()
     expect(await ui.find({ text: 'Opus' })).toBeUndefined()
     expect(await ui.find({ text: '$' })).toBeUndefined()
     if (surface === 'desktop') expect(await ui.find({ type: 'Svg' })).toBeDefined()
@@ -71,15 +71,18 @@ test('band shows context fill and time to the limit reset, no model or cost', as
   }
 })
 
-test('a blue bar under the context bar shows the 5-hour limit, without text', async ($, on) => {
+test('each bar has its own percent: the context fill over the 5-hour limit', async ($, on) => {
   world(on, { via: 'none', on: false, calls: 0 })
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
 
   const desktop = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
-  const svg = String((await desktop.find({ type: 'Svg' }))?.props.source)
-  // 23% of 140px, drawn under the 42% context bar
-  expect(svg).toContain('<rect y="7" width="32" height="4" rx="2" fill="#4A8FE8"/>')
-  expect(svg).toContain('<rect y="0" width="59" height="4" rx="2" fill="#D97757"/>')
+  const svgs = await desktop.findAll({ type: 'Svg' })
+  const source = (what: string) =>
+    String(svgs.find(el => String(el.props.alt).startsWith(what))?.props.source)
+  // each bar is its own drawing beside its own percent: 42% of 140px over 23% of it
+  expect(source('контекст')).toContain('<rect width="59" height="4" rx="2" fill="#D97757"/>')
+  expect(source('лимит')).toContain('<rect width="32" height="4" rx="2" fill="#4A8FE8"/>')
+  expect(await desktop.find({ type: 'Text', text: '23%' })).toBeDefined()
   await desktop.unmount()
 
   const terminal = await $.ui.mount({ plugin: 'context-bar', surface: 'terminal', component: 'AbovePrompt', props: props(false) })
@@ -202,7 +205,7 @@ test('a session of its own makes no reading: the 5-hour window is the last one k
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
 
   const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
-  expect(await ui.find({ type: 'Text', text: '\u2248лимит 23%  ·  02:14' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '\u224823%  02:14' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -211,7 +214,8 @@ test('a reading past its reset is dropped, not shown as a running window', async
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
 
   const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
-  expect(await ui.find({ type: 'Text', text: 'лимит' })).toBeUndefined()
+  expect((await ui.findAll({ type: 'Svg' })).some(el => String(el.props.alt).startsWith('лимит'))).toBe(false)
+  expect(await ui.find({ type: 'Text', text: '23%' })).toBeUndefined()
   await ui.unmount()
 })
 
@@ -226,6 +230,6 @@ test('a turn pushes the figures: the band has them without waiting for a tick', 
     changed: ['context', 'rateLimits'],
   })
   expect(await ui.find({ type: 'Text', text: '46%  91k' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'лимит 31%  ·  02:14' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '31%  02:14' })).toBeDefined()
   await ui.unmount()
 })
