@@ -1,8 +1,11 @@
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit } from 'claude-code'
 
-import type { Snapshot } from '../types'
+import type { Limit, Snapshot } from '../types'
 
 const snap = { plugin: 'context-bar', key: 'snap' } as const
+// The 5-hour window belongs to the account, not to one session: the last reading any
+// session saw lets a session that has made no request of its own still show it.
+const KEPT = 'five-hour'
 
 const ACCENT = '#D97757'
 const LIMIT = '#4A8FE8'
@@ -10,6 +13,13 @@ const WARN = '#C2413A'
 const ON = '#3FA266'
 const CONNECTING = '#D9A441'
 const OFF = '#A3A3A3'
+
+// How often the band catches the clock and the Remote switch up; the figures themselves
+// are pushed by session.measure, so this tick is only for what nothing announces.
+const TICK = 5000
+// The Remote switch is read every third tick; right after a press, every second.
+const REMOTE_EVERY = 3
+const CHASE = 1000
 
 // The desktop draws a Button's children in its own colour, so the dot is a drawing beside it.
 const dot = (color: string) =>
@@ -21,11 +31,13 @@ const short = (n: number) =>
     : n >= 1000 ? `${Math.round(n / 1000)}k`
     : `${n}`
 
-const left = (ms: number) => {
-  const m = Math.max(0, Math.ceil(ms / 60_000))
-  const h = Math.floor(m / 60)
-  return h > 0 ? `${h}ч ${m % 60}м` : `${m}м`
+const left = (minutes: number) => {
+  const h = Math.floor(minutes / 60)
+  return h > 0 ? `${h}ч ${minutes % 60}м` : `${minutes}м`
 }
+
+const minutesTo = (resetsAt: number | null, now: number) =>
+  resetsAt === null || resetsAt <= now ? null : Math.ceil((resetsAt - now) / 60_000)
 
 const GAP = 3
 
@@ -46,26 +58,71 @@ const bars = (percent: number, limit: number | null) => {
     + '</svg>'
 }
 
+type Figures = Pick<Snapshot, 'percent' | 'tokens' | 'window' | 'estimated'>
+
+// `context` is the last response's own input count, and the engine has none at all until
+// a session has had a response: one just opened, resumed or compacted. /context's local
+// estimate stands in meanwhile — it sends no request — so a resumed session is not a
+// blank bar until the person writes something.
+async function figures($: EngineInterface, context: SessionContextUsage): Promise<Figures> {
+  if (context.percent !== undefined && context.tokens !== undefined)
+    return { percent: context.percent, tokens: context.tokens, window: context.window, estimated: false }
+  const guess = await $.session.usage({ breakdown: 'summary' })
+    .then(u => u.context.breakdown?.totalTokens)
+    .catch(() => undefined)
+  return guess === undefined
+    ? { percent: null, tokens: null, window: context.window, estimated: false }
+    : {
+      percent: Math.min(100, Math.round((guess * 100) / context.window)),
+      tokens: guess,
+      window: context.window,
+      estimated: true,
+    }
+}
+
+type Limits = Pick<Snapshot, 'fiveHour' | 'resetsAt' | 'minutes' | 'limitKept'>
+
+const NO_LIMIT: Limits = { fiveHour: null, resetsAt: null, minutes: null, limitKept: false }
+
+async function limits($: EngineInterface, rateLimits: readonly SessionRateLimit[], now: number): Promise<Limits> {
+  const five = rateLimits.find(r => r.kind === 'five_hour')
+  if (five !== undefined) {
+    const seen: Limit = {
+      percent: Math.round(five.percentUsed),
+      resetsAt: five.resetsAt !== undefined ? Date.parse(five.resetsAt) : null,
+    }
+    await $.store.set(KEPT, seen).catch(() => {})
+    return { fiveHour: seen.percent, resetsAt: seen.resetsAt, minutes: minutesTo(seen.resetsAt, now), limitKept: false }
+  }
+  const kept = await $.store.get(KEPT).catch(() => undefined) as Limit | undefined
+  // A reading of a window that has since reset says nothing about the one running now.
+  return kept !== undefined && kept.resetsAt !== null && kept.resetsAt > now
+    ? { fiveHour: kept.percent, resetsAt: kept.resetsAt, minutes: minutesTo(kept.resetsAt, now), limitKept: true }
+    : NO_LIMIT
+}
+
 type Remote = Pick<Snapshot, 'remote' | 'remoteVia'>
 
 const GET_SESSION = 'mcp__ccd_session_mgmt__get_session'
+const NO_REMOTE: Remote = { remote: null, remoteVia: null }
 
 // The desktop app owns Remote Control: get_session("self") reports remoteControlState.
-// The bar polls it, so it reads it only where a rule already allows the call: a poll
-// must never put a permission dialog in front of the person.
-// In a terminal, /remote-control is the toggle; its description reads "Disconnect Remote Control" while connected.
+// Nothing announces a change, so the band reads it on the tick, and only where a rule
+// already allows the call: a poll must never put a permission dialog in front of the
+// person. In a terminal, /remote-control is the toggle; its description reads
+// "Disconnect Remote Control" while connected.
 async function remoteState($: EngineInterface): Promise<Remote> {
   try {
     const isApp = (await $.tool.list()).some(t => t.name === GET_SESSION)
     if (isApp) {
       const { decision } = await $.tool.check({ tool: GET_SESSION, input: { session_id: 'self' } })
-      if (decision !== 'allow') return { remote: null, remoteVia: null }
+      if (decision !== 'allow') return NO_REMOTE
       const r = await $.tool.call({ tool: GET_SESSION, session_id: 'self' })
       const state = r.text ? /"remoteControlState"\s*:\s*"(\w+)"/.exec(r.text)?.[1] : undefined
       if (!r.isError && !r.deny && state) {
         return state === 'on' || state === 'off' || state === 'connecting'
           ? { remote: state, remoteVia: 'app' }
-          : { remote: null, remoteVia: null }
+          : NO_REMOTE
       }
     }
   } catch {
@@ -74,53 +131,100 @@ async function remoteState($: EngineInterface): Promise<Remote> {
   const rc = (await $.command.list()).find(c => c.name === 'remote-control')
   return rc
     ? { remote: /disconnect/i.test(rc.description) ? 'on' : 'off', remoteVia: 'command' }
-    : { remote: null, remoteVia: null }
+    : NO_REMOTE
 }
 
-async function snapshot($: EngineInterface): Promise<Snapshot> {
-  const [usage, remote] = await Promise.all([$.session.usage(), remoteState($)])
-  const five = usage.rateLimits.find(r => r.kind === 'five_hour')
-  return {
-    percent: usage.context.percent ?? null,
-    tokens: usage.context.tokens ?? null,
-    window: usage.context.window,
-    fiveHour: five ? Math.round(five.percentUsed) : null,
-    resetsAt: five?.resetsAt ? Date.parse(five.resetsAt) : null,
-    ...remote,
+// The press the switch is waiting out, the tick's count and the two timers: module state,
+// so the helpers below are top-level functions and a hot reload starts them over.
+let pending: { target: 'on' | 'off'; until: number } | null = null
+let ticks = 0
+let tick: { cancel: () => void } | undefined
+let chase: { cancel: () => void } | undefined
+
+// After a press the app still reports the old state for a few seconds:
+// hold the switch where the press put it until the app catches up.
+function held(s: Snapshot, now: number): Snapshot {
+  if (pending === null || s.remote === null) return s
+  if (s.remote === pending.target || now > pending.until) {
+    pending = null
+    return s
   }
+  return { ...s, remote: pending.target === 'on' ? 'connecting' : 'off' }
+}
+
+// One write per change and none otherwise, so an idle session costs nothing. The engine
+// caches what a render hook drew, so a write is followed by the ask that draws the band
+// again: without it the line keeps the figures it was first drawn with.
+async function write($: EngineInterface, next: Snapshot) {
+  const now = await $.clock.now()
+  const value = held(next, now)
+  const { value: before = null } = await $.state.get(snap)
+  if (before !== null && JSON.stringify(before) === JSON.stringify(value)) return
+  await $.state.set(snap, value)
+  $.ui.invalidate('ui.render')
+}
+
+async function measured(
+  $: EngineInterface,
+  from?: { context: SessionContextUsage; rateLimits: readonly SessionRateLimit[] },
+): Promise<Snapshot> {
+  const now = await $.clock.now()
+  const usage = from ?? await $.session.usage()
+  const [fill, limit, remote] = await Promise.all([
+    figures($, usage.context),
+    limits($, usage.rateLimits, now),
+    remoteState($),
+  ])
+  return { ...fill, ...limit, ...remote }
+}
+
+// The countdown and the Remote switch are the two things nothing pushes.
+async function onTick($: EngineInterface) {
+  ticks += 1
+  const { value: s = null } = await $.state.get(snap)
+  if (s === null) return write($, await measured($))
+  const remote = pending !== null || ticks % REMOTE_EVERY === 0
+    ? await remoteState($)
+    : { remote: s.remote, remoteVia: s.remoteVia }
+  return write($, { ...s, ...remote, minutes: minutesTo(s.resetsAt, await $.clock.now()) })
+}
+
+function arm($: EngineInterface) {
+  tick?.cancel()
+  tick = $.clock.every(TICK, () => { void onTick($).catch(() => {}) })
+}
+
+async function chased($: EngineInterface) {
+  const { value: s = null } = await $.state.get(snap)
+  if (s === null || pending === null) {
+    chase?.cancel()
+    chase = undefined
+    return
+  }
+  await write($, { ...s, ...await remoteState($) })
+}
+
+// A press is worth following closely: the app reports the old state for a few seconds.
+function chaseRemote($: EngineInterface) {
+  chase?.cancel()
+  chase = $.clock.every(CHASE, () => { void chased($).catch(() => {}) })
 }
 
 export const register: Register = on => {
-  let timer: { cancel: () => void } | undefined
-  // After a press the app still reports the old state for a few seconds:
-  // hold the switch where the press put it until the app catches up.
-  let pending: { target: 'on' | 'off'; until: number } | null = null
-
-  const held = (s: Snapshot, now: number): Snapshot => {
-    if (pending === null || s.remote === null) return s
-    if (s.remote === pending.target || now > pending.until) {
-      pending = null
-      return s
-    }
-    return { ...s, remote: pending.target === 'on' ? 'connecting' : 'off' }
-  }
-
   on('session.start', async ($, e, next) => {
     const result = await next(e)
-    const first = await snapshot($)
-    await $.state.set(snap, held(first, await $.clock.now()))
-    timer?.cancel()
-    timer = $.clock.every(2000, async () => {
-      const s = await snapshot($)
-      await $.state.set(snap, held(s, await $.clock.now()))
-    })
+    await write($, await measured($))
+    arm($)
     return result
   })
 
-  on('turn.complete', async ($, e, next) => {
+  // The figures are pushed, not polled: this fires after every turn and whenever a
+  // rate-limit window moves a whole point. Arming the tick here again also outlives a
+  // refused period, which would otherwise end the interval for the rest of the session.
+  on('session.measure', async ($, e, next) => {
     const result = await next(e)
-    const s = await snapshot($)
-    await $.state.set(snap, held(s, await $.clock.now()))
+    await write($, await measured($, e))
+    arm($)
     return result
   })
 
@@ -135,17 +239,20 @@ export const register: Register = on => {
     const cells = Math.min(20, Math.round(pct / 5))
     const limitCells = s.fiveHour === null ? null : Math.max(0, Math.min(20, Math.round(s.fiveHour / 5)))
     const hot = pct >= 80
-    const now = await $.clock.now()
+    // `≈` marks what is not a response's own figure: the local estimate of the fill, and
+    // a 5-hour reading this session did not make itself.
+    const fill = s.percent === null ? '—' : `${s.estimated ? '≈' : ''}${s.percent}%`
     const limit = s.fiveHour === null ? null
-      : s.resetsAt !== null && s.resetsAt > now
-        ? `·  лимит ${s.fiveHour}%, сброс через ${left(s.resetsAt - now)}`
-        : `·  лимит ${s.fiveHour}%`
+      : s.minutes !== null
+        ? `·  ${s.limitKept ? '≈' : ''}лимит ${s.fiveHour}%, сброс через ${left(s.minutes)}`
+        : `·  ${s.limitKept ? '≈' : ''}лимит ${s.fiveHour}%`
 
     const isOn = s.remote === 'on' || s.remote === 'connecting'
     const dotColor = s.remote === 'on' ? ON : s.remote === 'connecting' ? CONNECTING : OFF
     const toggle = async () => {
       pending = { target: isOn ? 'off' : 'on', until: (await $.clock.now()) + 20_000 }
       await $.state.set(snap, { ...s, remote: isOn ? 'off' : 'connecting' })
+      $.ui.invalidate('ui.render')
       try {
         if (s.remoteVia === 'app') {
           const r = await $.tool.call({ tool: 'mcp__ccd_session_mgmt__set_remote_control', session_id: 'self', enabled: !isOn })
@@ -161,8 +268,8 @@ export const register: Register = on => {
         pending = null
         $.ui.toast('Remote Control не переключился')
       }
-      const fresh = await snapshot($)
-      await $.state.set(snap, held(fresh, await $.clock.now()))
+      await write($, { ...s, ...await remoteState($) })
+      if (pending !== null) chaseRemote($)
     }
 
     return (
@@ -186,7 +293,7 @@ export const register: Register = on => {
               </Box>
             )}
           <Text size="caption" tabular color={hot ? 'error' : undefined} dimColor={!hot}>
-            {`${pct}%`}
+            {fill}
             <Text dimColor>{s.tokens !== null ? `  ${short(s.tokens)} / ${short(s.window)}` : ''}</Text>
           </Text>
           {limit !== null ? <Text size="caption" tabular dimColor>{limit}</Text> : null}

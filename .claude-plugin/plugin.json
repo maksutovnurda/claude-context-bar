@@ -1,6 +1,6 @@
 {
   "name": "context-bar",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Тонкая строка над полем ввода: заполнение контекста, лимит 5ч и переключатель Remote Control",
   "types": "./types/index.d.ts",
   "author": {

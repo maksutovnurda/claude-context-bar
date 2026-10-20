@@ -47,6 +47,7 @@ function world(on: On, remote: Remote) {
     if (remote.via === 'command' && e.command === 'remote-control') { remote.on = !remote.on; remote.calls += 1 }
     return {}
   })
+  on('session.measure', ($, e, _next) => ({ changed: e.changed }))
   on('session.start', ($, e, _next) => ({ cwd: e.cwd }))
   on('ui.render', ($, e, _next) => {
     const { Box } = $.ui.resolve(e)
@@ -143,4 +144,88 @@ test('no toggle where Remote Control is unavailable; band yields to a survey', a
   const survey = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(true) })
   expect(await survey.find({ type: 'Text', text: '%' })).toBeUndefined()
   await survey.unmount()
+})
+
+// A session the engine has no figures for: just opened, resumed or compacted, before its
+// first response. /context's local estimate is all there is, and the 5-hour window only
+// what an earlier session wrote.
+function quiet(on: On, kept?: Record<string, unknown>) {
+  const clock = mock.clock(on, { now: Date.UTC(2026, 9, 16, 12, 0) })
+  mock.store(on, kept)
+  on('session.usage', ($, e, _next) => ({ value: {
+    startedAt: 0,
+    context: e.breakdown === undefined ? { window: 200_000 } : {
+      window: 200_000,
+      breakdown: {
+        categories: [], totalTokens: 76_000, maxTokens: 200_000, rawMaxTokens: 200_000,
+        autocompactSource: 'model-default' as const, percentage: 38, gridRows: [],
+        model: 'Opus', memoryFiles: [], mcpTools: [], agents: [],
+        isAutoCompactEnabled: false, apiUsage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+      },
+    },
+    rateLimits: [],
+  } }))
+  on('tool.list', ($, _e, _next) => ({ value: [] }))
+  on('command.list', ($, _e, _next) => ({ value: [] }))
+  on('session.measure', ($, e, _next) => ({ changed: e.changed }))
+  on('session.start', ($, e, _next) => ({ cwd: e.cwd }))
+  on('ui.render', ($, e, _next) => {
+    const { Box } = $.ui.resolve(e)
+    return <Box />
+  })
+  return clock
+}
+
+test('the countdown to the reset moves while the session sits idle', async ($, on) => {
+  const clock = world(on, { via: 'none', on: false, calls: 0 })
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+
+  const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
+  expect(await ui.find({ type: 'Text', text: 'сброс через 2ч 14м' })).toBeDefined()
+  await clock.advance(5 * 60_000)
+  expect(await ui.find({ type: 'Text', text: 'сброс через 2ч 9м' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('before its first response a session shows the local estimate, not a blank bar', async ($, on) => {
+  quiet(on)
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+
+  const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
+  expect(await ui.find({ type: 'Text', text: '\u224838%  76k / 200k' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a session of its own makes no reading: the 5-hour window is the last one kept', async ($, on) => {
+  const resetsAt = Date.UTC(2026, 9, 16, 14, 14)
+  quiet(on, { 'five-hour': { percent: 23, resetsAt } })
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+
+  const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
+  expect(await ui.find({ type: 'Text', text: '\u2248лимит 23%, сброс через 2ч 14м' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a reading past its reset is dropped, not shown as a running window', async ($, on) => {
+  quiet(on, { 'five-hour': { percent: 23, resetsAt: Date.UTC(2026, 9, 16, 11, 0) } })
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+
+  const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
+  expect(await ui.find({ type: 'Text', text: 'лимит' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a turn pushes the figures: the band has them without waiting for a tick', async ($, on) => {
+  quiet(on)
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+
+  const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
+  await $.session.measure({
+    context: { tokens: 91_000, window: 200_000, percent: 46 },
+    rateLimits: [{ kind: 'five_hour', percentUsed: 31, resetsAt: new Date(Date.UTC(2026, 9, 16, 14, 14)).toISOString() }],
+    changed: ['context', 'rateLimits'],
+  })
+  expect(await ui.find({ type: 'Text', text: '46%  91k / 200k' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'лимит 31%, сброс через 2ч 14м' })).toBeDefined()
+  await ui.unmount()
 })
