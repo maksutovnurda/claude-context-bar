@@ -31,10 +31,10 @@ const short = (n: number) =>
     : n >= 1000 ? `${Math.round(n / 1000)}k`
     : `${n}`
 
-const left = (minutes: number) => {
-  const h = Math.floor(minutes / 60)
-  return h > 0 ? `${h}ч ${minutes % 60}м` : `${minutes}м`
-}
+const pad = (n: number) => String(n).padStart(2, '0')
+
+// Time to the reset as a clock reads it: 02:14, the words left off.
+const hhmm = (minutes: number) => `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`
 
 const minutesTo = (resetsAt: number | null, now: number) =>
   resetsAt === null || resetsAt <= now ? null : Math.ceil((resetsAt - now) / 60_000)
@@ -58,7 +58,7 @@ const bars = (percent: number, limit: number | null) => {
     + '</svg>'
 }
 
-type Figures = Pick<Snapshot, 'percent' | 'tokens' | 'window' | 'estimated'>
+type Figures = Pick<Snapshot, 'percent' | 'tokens' | 'estimated'>
 
 // `context` is the last response's own input count, and the engine has none at all until
 // a session has had a response: one just opened, resumed or compacted. /context's local
@@ -66,16 +66,15 @@ type Figures = Pick<Snapshot, 'percent' | 'tokens' | 'window' | 'estimated'>
 // blank bar until the person writes something.
 async function figures($: EngineInterface, context: SessionContextUsage): Promise<Figures> {
   if (context.percent !== undefined && context.tokens !== undefined)
-    return { percent: context.percent, tokens: context.tokens, window: context.window, estimated: false }
+    return { percent: context.percent, tokens: context.tokens, estimated: false }
   const guess = await $.session.usage({ breakdown: 'summary' })
     .then(u => u.context.breakdown?.totalTokens)
     .catch(() => undefined)
   return guess === undefined
-    ? { percent: null, tokens: null, window: context.window, estimated: false }
+    ? { percent: null, tokens: null, estimated: false }
     : {
       percent: Math.min(100, Math.round((guess * 100) / context.window)),
       tokens: guess,
-      window: context.window,
       estimated: true,
     }
 }
@@ -245,7 +244,7 @@ export const register: Register = on => {
     const fill = s.percent === null ? '—' : `${s.estimated ? '≈' : ''}${s.percent}%`
     const limit = s.fiveHour === null ? null
       : s.minutes !== null
-        ? `·  ${s.limitKept ? '≈' : ''}лимит ${s.fiveHour}%  ·  сброс через ${left(s.minutes)}`
+        ? `·  ${s.limitKept ? '≈' : ''}лимит ${s.fiveHour}%  ·  ${hhmm(s.minutes)}`
         : `·  ${s.limitKept ? '≈' : ''}лимит ${s.fiveHour}%`
 
     const isOn = s.remote === 'on' || s.remote === 'connecting'
@@ -295,7 +294,7 @@ export const register: Register = on => {
             )}
           <Text size="caption" tabular color={hot ? 'error' : undefined} dimColor={!hot}>
             {fill}
-            <Text dimColor>{s.tokens !== null ? `  ${short(s.tokens)} / ${short(s.window)}` : ''}</Text>
+            <Text dimColor>{s.tokens !== null ? `  ${short(s.tokens)}` : ''}</Text>
           </Text>
           {limit !== null ? <Text size="caption" tabular dimColor>{limit}</Text> : null}
         </Box>

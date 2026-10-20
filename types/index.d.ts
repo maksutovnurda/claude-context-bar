@@ -1,7 +1,6 @@
 export type Snapshot = {
   percent: number | null
   tokens: number | null
-  window: number
   /** True while the fill is the local estimate rather than a response's own count. */
   estimated: boolean
   fiveHour: number | null

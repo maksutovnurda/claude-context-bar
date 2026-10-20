@@ -62,8 +62,8 @@ test('band shows context fill and time to the limit reset, no model or cost', as
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'context-bar', surface, component: 'AbovePrompt', props: props(false) })
-    expect(await ui.find({ type: 'Text', text: '42%  84k / 200k' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: 'лимит 23%  ·  сброс через 2ч 14м' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '42%  84k' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'лимит 23%  ·  02:14' })).toBeDefined()
     expect(await ui.find({ text: 'Opus' })).toBeUndefined()
     expect(await ui.find({ text: '$' })).toBeUndefined()
     if (surface === 'desktop') expect(await ui.find({ type: 'Svg' })).toBeDefined()
@@ -130,7 +130,7 @@ test('without an allow rule the bar never asks the app, so no permission dialogs
   const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
   expect(remote.reads ?? 0).toBe(0)
   expect(await ui.find({ key: 'remote' })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: '42%  84k / 200k' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '42%  84k' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -181,9 +181,9 @@ test('the countdown to the reset moves while the session sits idle', async ($, o
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
 
   const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
-  expect(await ui.find({ type: 'Text', text: 'сброс через 2ч 14м' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '02:14' })).toBeDefined()
   await clock.advance(5 * 60_000)
-  expect(await ui.find({ type: 'Text', text: 'сброс через 2ч 9м' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '02:09' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -192,7 +192,7 @@ test('before its first response a session shows the local estimate, not a blank 
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
 
   const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
-  expect(await ui.find({ type: 'Text', text: '\u224838%  76k / 200k' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '\u224838%  76k' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -202,7 +202,7 @@ test('a session of its own makes no reading: the 5-hour window is the last one k
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
 
   const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
-  expect(await ui.find({ type: 'Text', text: '\u2248лимит 23%  ·  сброс через 2ч 14м' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '\u2248лимит 23%  ·  02:14' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -225,7 +225,7 @@ test('a turn pushes the figures: the band has them without waiting for a tick', 
     rateLimits: [{ kind: 'five_hour', percentUsed: 31, resetsAt: new Date(Date.UTC(2026, 9, 16, 14, 14)).toISOString() }],
     changed: ['context', 'rateLimits'],
   })
-  expect(await ui.find({ type: 'Text', text: '46%  91k / 200k' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'лимит 31%  ·  сброс через 2ч 14м' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '46%  91k' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'лимит 31%  ·  02:14' })).toBeDefined()
   await ui.unmount()
 })
