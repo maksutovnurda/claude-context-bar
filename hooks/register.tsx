@@ -274,36 +274,39 @@ export const register: Register = on => {
 
     const tokens = s.tokens !== null ? short(s.tokens) : ''
     const until = s.minutes !== null ? hhmm(s.minutes) : ''
+    // The bars stack, each with its own percent; everything else is one line beside them.
+    const rest = [tokens, until].filter(one => one !== '').join('  ·  ')
 
     return (
       <Box flexDirection="row" alignItems="center" justifyContent="space-between" paddingX={1}>
-        <Box flexDirection="column">
-          <Box key="fill" flexDirection="row" alignItems="center" gap={1}>
-            {Svg
-              ? <Svg source={row(pct, hot ? WARN : ACCENT, fill)} alt={`контекст ${fill}`} width={WIDTH} height={ROW} />
-              : (
-                <>
-                  <Text color={hot ? 'error' : 'claude'}>{'━'.repeat(cells)}<Text dimColor>{'━'.repeat(20 - cells)}</Text></Text>
-                  <Text size="caption" tabular color={hot ? 'error' : undefined} dimColor={!hot}>{fill}</Text>
-                </>
-              )}
-            {tokens !== '' ? <Text size="caption" tabular dimColor>{tokens}</Text> : null}
+        <Box flexDirection="row" alignItems="center" gap={1}>
+          <Box flexDirection="column">
+            <Box key="fill" flexDirection="row" alignItems="center" gap={1}>
+              {Svg
+                ? <Svg source={row(pct, hot ? WARN : ACCENT, fill)} alt={`контекст ${fill}`} width={WIDTH} height={ROW} />
+                : (
+                  <>
+                    <Text color={hot ? 'error' : 'claude'}>{'━'.repeat(cells)}<Text dimColor>{'━'.repeat(20 - cells)}</Text></Text>
+                    <Text size="caption" tabular color={hot ? 'error' : undefined} dimColor={!hot}>{fill}</Text>
+                  </>
+                )}
+            </Box>
+            {limit !== null && limitCells !== null
+              ? (
+                <Box key="limit" flexDirection="row" alignItems="center" gap={1}>
+                  {Svg
+                    ? <Svg source={row(s.fiveHour ?? 0, LIMIT, limit)} alt={`лимит ${limit}`} width={WIDTH} height={ROW} />
+                    : (
+                      <>
+                        <Text color={LIMIT}>{'━'.repeat(limitCells)}<Text dimColor>{'━'.repeat(20 - limitCells)}</Text></Text>
+                        <Text size="caption" tabular dimColor>{limit}</Text>
+                      </>
+                    )}
+                </Box>
+              )
+              : null}
           </Box>
-          {limit !== null && limitCells !== null
-            ? (
-              <Box key="limit" flexDirection="row" alignItems="center" gap={1}>
-                {Svg
-                  ? <Svg source={row(s.fiveHour ?? 0, LIMIT, limit)} alt={`лимит ${limit}`} width={WIDTH} height={ROW} />
-                  : (
-                    <>
-                      <Text color={LIMIT}>{'━'.repeat(limitCells)}<Text dimColor>{'━'.repeat(20 - limitCells)}</Text></Text>
-                      <Text size="caption" tabular dimColor>{limit}</Text>
-                    </>
-                  )}
-                {until !== '' ? <Text size="caption" tabular dimColor>{until}</Text> : null}
-              </Box>
-            )
-            : null}
+          {rest !== '' ? <Text size="caption" tabular dimColor>{rest}</Text> : null}
         </Box>
         {s.remote !== null
           ? (
