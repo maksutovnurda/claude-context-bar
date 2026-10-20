@@ -61,8 +61,10 @@ test('band shows context fill and time to the limit reset, no model or cost', as
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
 
   const terminal = await $.ui.mount({ plugin: 'context-bar', surface: 'terminal', component: 'AbovePrompt', props: props(false) })
-  expect(await terminal.find({ type: 'Text', text: '42%  84k' })).toBeDefined()
-  expect(await terminal.find({ type: 'Text', text: '23%  02:14' })).toBeDefined()
+  expect(await terminal.find({ type: 'Text', text: '42%' })).toBeDefined()
+  expect(await terminal.find({ type: 'Text', text: '84k' })).toBeDefined()
+  expect(await terminal.find({ type: 'Text', text: '23%' })).toBeDefined()
+  expect(await terminal.find({ type: 'Text', text: '02:14' })).toBeDefined()
   expect(await terminal.find({ text: 'Opus' })).toBeUndefined()
   expect(await terminal.find({ text: '$' })).toBeUndefined()
   await terminal.unmount()
@@ -71,8 +73,10 @@ test('band shows context fill and time to the limit reset, no model or cost', as
   const drawn = (await desktop.findAll({ type: 'Svg' })).map(el => String(el.props.source)).join('')
   // 9px, under the surface's smallest text step, so the figures sit inside the drawing
   expect(drawn).toContain('font-size="9"')
-  expect(drawn).toContain('>42%  84k<')
-  expect(drawn).toContain('>23%  02:14<')
+  expect(drawn).toContain('>42%<')
+  expect(drawn).toContain('>23%<')
+  expect(await desktop.find({ type: 'Text', text: '84k' })).toBeDefined()
+  expect(await desktop.find({ type: 'Text', text: '02:14' })).toBeDefined()
   expect(await desktop.find({ text: 'Opus' })).toBeUndefined()
   await desktop.unmount()
 })
@@ -88,7 +92,7 @@ test('each bar has its own percent: the context fill over the 5-hour limit', asy
   // each bar is its own drawing beside its own percent: 42% of 140px over 23% of it
   expect(source('контекст')).toContain('<rect y="4" width="59" height="4" rx="2" fill="#D97757"/>')
   expect(source('лимит')).toContain('<rect y="4" width="32" height="4" rx="2" fill="#4A8FE8"/>')
-  expect(source('лимит')).toContain('>23%  02:14<')
+  expect(source('лимит')).toContain('>23%<')
   await desktop.unmount()
 
   const terminal = await $.ui.mount({ plugin: 'context-bar', surface: 'terminal', component: 'AbovePrompt', props: props(false) })
@@ -139,7 +143,8 @@ test('without an allow rule the bar never asks the app, so no permission dialogs
   const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
   expect(remote.reads ?? 0).toBe(0)
   expect(await ui.find({ key: 'remote' })).toBeUndefined()
-  expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('>42%  84k<')
+  expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('>42%<')
+  expect(await ui.find({ type: 'Text', text: '84k' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -201,7 +206,8 @@ test('before its first response a session shows the local estimate, not a blank 
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
 
   const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'terminal', component: 'AbovePrompt', props: props(false) })
-  expect(await ui.find({ type: 'Text', text: '\u224838%  76k' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '\u224838%' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '76k' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -211,7 +217,8 @@ test('a session of its own makes no reading: the 5-hour window is the last one k
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
 
   const ui = await $.ui.mount({ plugin: 'context-bar', surface: 'terminal', component: 'AbovePrompt', props: props(false) })
-  expect(await ui.find({ type: 'Text', text: '\u224823%  02:14' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '\u224823%' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '02:14' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -235,7 +242,9 @@ test('a turn pushes the figures: the band has them without waiting for a tick', 
     changed: ['context', 'rateLimits'],
   })
   const drawn = (await ui.findAll({ type: 'Svg' })).map(el => String(el.props.source)).join('')
-  expect(drawn).toContain('>46%  91k<')
-  expect(drawn).toContain('>31%  02:14<')
+  expect(drawn).toContain('>46%<')
+  expect(drawn).toContain('>31%<')
+  expect(await ui.find({ type: 'Text', text: '91k' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '02:14' })).toBeDefined()
   await ui.unmount()
 })

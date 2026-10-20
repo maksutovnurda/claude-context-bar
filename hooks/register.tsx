@@ -39,23 +39,24 @@ const hhmm = (minutes: number) => `${pad(Math.floor(minutes / 60))}:${pad(minute
 const minutesTo = (resetsAt: number | null, now: number) =>
   resetsAt === null || resetsAt <= now ? null : Math.ceil((resetsAt - now) / 60_000)
 
-// A row: the bar and its figures in one drawing. The surface's smallest text step
-// (`caption`) is still a little big for a line this thin, and a drawing takes a size in
-// pixels, so the figures are set here — at the row's own height, aligned with the bar.
-const FIGURES = 90
+// A row: the bar and its percent in one drawing. The surface's smallest text step
+// (`caption`) is still a little big for the percent, and a drawing takes a size in
+// pixels, so that one figure is set here, on the baseline the bar is centred against.
+// Everything else beside it stays text at the surface's own size.
+const FIGURES = 34
 const ROW = 12
 const SIZE = 9
 const INK = '#888'
 const FACE = 'system-ui, -apple-system, sans-serif'
 const WIDTH = BAR + 8 + FIGURES
 
-const row = (percent: number, color: string, figures: string) => {
+const row = (percent: number, color: string, label: string) => {
   const fill = Math.max(0, Math.min(BAR, Math.round((BAR * percent) / 100)))
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${ROW}" viewBox="0 0 ${WIDTH} ${ROW}">`
     + `<rect y="4" width="${BAR}" height="4" rx="2" fill="${INK}" fill-opacity="0.18"/>`
     + `<rect y="4" width="${fill}" height="4" rx="2" fill="${color}"/>`
     + `<text x="${BAR + 8}" y="9" font-size="${SIZE}" font-family="${FACE}"`
-    + ` style="font-variant-numeric:tabular-nums" fill="${INK}" xml:space="preserve">${figures}</text>`
+    + ` style="font-variant-numeric:tabular-nums" fill="${INK}">${label}</text>`
     + '</svg>'
 }
 
@@ -271,29 +272,37 @@ export const register: Register = on => {
       if (pending !== null) chaseRemote($)
     }
 
-    const tokens = s.tokens !== null ? `  ${short(s.tokens)}` : ''
-    const until = s.minutes !== null ? `  ${hhmm(s.minutes)}` : ''
+    const tokens = s.tokens !== null ? short(s.tokens) : ''
+    const until = s.minutes !== null ? hhmm(s.minutes) : ''
 
     return (
       <Box flexDirection="row" alignItems="center" justifyContent="space-between" paddingX={1}>
         <Box flexDirection="column">
-          {Svg
-            ? <Svg source={row(pct, hot ? WARN : ACCENT, `${fill}${tokens}`)} alt={`контекст ${fill}${tokens}`} width={WIDTH} height={ROW} />
-            : (
-              <Box key="fill" flexDirection="row" alignItems="center" gap={1}>
-                <Text color={hot ? 'error' : 'claude'}>{'━'.repeat(cells)}<Text dimColor>{'━'.repeat(20 - cells)}</Text></Text>
-                <Text size="caption" tabular color={hot ? 'error' : undefined} dimColor={!hot}>{`${fill}${tokens}`}</Text>
-              </Box>
-            )}
-          {limit !== null && limitCells !== null
-            ? (Svg
-              ? <Svg source={row(s.fiveHour ?? 0, LIMIT, `${limit}${until}`)} alt={`лимит ${limit}${until}`} width={WIDTH} height={ROW} />
+          <Box key="fill" flexDirection="row" alignItems="center" gap={1}>
+            {Svg
+              ? <Svg source={row(pct, hot ? WARN : ACCENT, fill)} alt={`контекст ${fill}`} width={WIDTH} height={ROW} />
               : (
-                <Box key="limit" flexDirection="row" alignItems="center" gap={1}>
-                  <Text color={LIMIT}>{'━'.repeat(limitCells)}<Text dimColor>{'━'.repeat(20 - limitCells)}</Text></Text>
-                  <Text size="caption" tabular dimColor>{`${limit}${until}`}</Text>
-                </Box>
-              ))
+                <>
+                  <Text color={hot ? 'error' : 'claude'}>{'━'.repeat(cells)}<Text dimColor>{'━'.repeat(20 - cells)}</Text></Text>
+                  <Text size="caption" tabular color={hot ? 'error' : undefined} dimColor={!hot}>{fill}</Text>
+                </>
+              )}
+            {tokens !== '' ? <Text size="caption" tabular dimColor>{tokens}</Text> : null}
+          </Box>
+          {limit !== null && limitCells !== null
+            ? (
+              <Box key="limit" flexDirection="row" alignItems="center" gap={1}>
+                {Svg
+                  ? <Svg source={row(s.fiveHour ?? 0, LIMIT, limit)} alt={`лимит ${limit}`} width={WIDTH} height={ROW} />
+                  : (
+                    <>
+                      <Text color={LIMIT}>{'━'.repeat(limitCells)}<Text dimColor>{'━'.repeat(20 - limitCells)}</Text></Text>
+                      <Text size="caption" tabular dimColor>{limit}</Text>
+                    </>
+                  )}
+                {until !== '' ? <Text size="caption" tabular dimColor>{until}</Text> : null}
+              </Box>
+            )
             : null}
         </Box>
         {s.remote !== null
