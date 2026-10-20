@@ -5,6 +5,7 @@ import type { Snapshot } from '../types'
 const snap = { plugin: 'context-bar', key: 'snap' } as const
 
 const ACCENT = '#D97757'
+const LIMIT = '#4A8FE8'
 const WARN = '#C2413A'
 const ON = '#3FA266'
 const CONNECTING = '#D9A441'
@@ -26,12 +27,23 @@ const left = (ms: number) => {
   return h > 0 ? `${h}ч ${m % 60}м` : `${m}м`
 }
 
-const bar = (percent: number) => {
+const GAP = 3
+
+const track = (percent: number, color: string, y: number) => {
   const fill = Math.max(0, Math.min(BAR, Math.round((BAR * percent) / 100)))
-  const color = percent >= 80 ? WARN : ACCENT
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${BAR}" height="4" viewBox="0 0 ${BAR} 4">`
-    + `<rect width="${BAR}" height="4" rx="2" fill="#888" fill-opacity="0.18"/>`
-    + `<rect width="${fill}" height="4" rx="2" fill="${color}"/></svg>`
+  return `<rect y="${y}" width="${BAR}" height="4" rx="2" fill="#888" fill-opacity="0.18"/>`
+    + `<rect y="${y}" width="${fill}" height="4" rx="2" fill="${color}"/>`
+}
+
+// Context on top; under it, without text, the 5-hour limit.
+const barsHeight = (limit: number | null) => (limit === null ? 4 : 8 + GAP)
+
+const bars = (percent: number, limit: number | null) => {
+  const height = barsHeight(limit)
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${BAR}" height="${height}" viewBox="0 0 ${BAR} ${height}">`
+    + track(percent, percent >= 80 ? WARN : ACCENT, 0)
+    + (limit === null ? '' : track(limit, LIMIT, 4 + GAP))
+    + '</svg>'
 }
 
 type Remote = Pick<Snapshot, 'remote' | 'remoteVia'>
@@ -121,6 +133,7 @@ export const register: Register = on => {
     const Svg = e.surface !== 'terminal' && 'Svg' in els ? els.Svg : undefined
     const pct = s.percent ?? 0
     const cells = Math.min(20, Math.round(pct / 5))
+    const limitCells = s.fiveHour === null ? null : Math.max(0, Math.min(20, Math.round(s.fiveHour / 5)))
     const hot = pct >= 80
     const now = await $.clock.now()
     const limit = s.fiveHour === null ? null
@@ -156,8 +169,22 @@ export const register: Register = on => {
       <Box flexDirection="row" alignItems="center" justifyContent="space-between" paddingX={1}>
         <Box flexDirection="row" alignItems="center" gap={1}>
           {Svg
-            ? <Svg source={bar(pct)} alt={`контекст ${pct}%`} width={BAR} height={4} />
-            : <Text color={hot ? 'error' : 'claude'}>{'━'.repeat(cells)}<Text dimColor>{'━'.repeat(20 - cells)}</Text></Text>}
+            ? (
+              <Svg
+                source={bars(pct, s.fiveHour)}
+                alt={s.fiveHour === null ? `контекст ${pct}%` : `контекст ${pct}%, лимит ${s.fiveHour}%`}
+                width={BAR}
+                height={barsHeight(s.fiveHour)}
+              />
+            )
+            : (
+              <Box flexDirection="column">
+                <Text color={hot ? 'error' : 'claude'}>{'━'.repeat(cells)}<Text dimColor>{'━'.repeat(20 - cells)}</Text></Text>
+                {limitCells !== null
+                  ? <Text color={LIMIT}>{'━'.repeat(limitCells)}<Text dimColor>{'━'.repeat(20 - limitCells)}</Text></Text>
+                  : null}
+              </Box>
+            )}
           <Text size="caption" tabular color={hot ? 'error' : undefined} dimColor={!hot}>
             {`${pct}%`}
             <Text dimColor>{s.tokens !== null ? `  ${short(s.tokens)} / ${short(s.window)}` : ''}</Text>

@@ -70,6 +70,23 @@ test('band shows context fill and time to the limit reset, no model or cost', as
   }
 })
 
+test('a blue bar under the context bar shows the 5-hour limit, without text', async ($, on) => {
+  world(on, { via: 'none', on: false, calls: 0 })
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+
+  const desktop = await $.ui.mount({ plugin: 'context-bar', surface: 'desktop', component: 'AbovePrompt', props: props(false) })
+  const svg = String((await desktop.find({ type: 'Svg' }))?.props.source)
+  // 23% of 140px, drawn under the 42% context bar
+  expect(svg).toContain('<rect y="7" width="32" height="4" rx="2" fill="#4A8FE8"/>')
+  expect(svg).toContain('<rect y="0" width="59" height="4" rx="2" fill="#D97757"/>')
+  await desktop.unmount()
+
+  const terminal = await $.ui.mount({ plugin: 'context-bar', surface: 'terminal', component: 'AbovePrompt', props: props(false) })
+  const blue = (await terminal.findAll({ type: 'Text' })).find(el => el.props.color === '#4A8FE8')
+  expect(blue).toBeDefined()
+  await terminal.unmount()
+})
+
 for (const via of ['app', 'command'] as const) {
   test(`the Remote toggle switches Remote Control (${via})`, async ($, on) => {
     const remote: Remote = { via, on: false, calls: 0 }
