@@ -25,17 +25,13 @@
 
 ## Установка
 
-В терминальной сессии Claude Code:
+```
+claude plugin marketplace add maksutovnurda/claude-context-bar
+claude plugin install context-bar@claude-context-bar
+```
 
-```
-/plugin install context-bar --marketplace maksutovnurda/claude-context-bar
-```
-
-Из шелла:
-
-```
-claude plugin install context-bar --marketplace maksutovnurda/claude-context-bar
-```
+Те же две команды в терминальной сессии Claude Code — как `/plugin marketplace add …` и
+`/plugin install …`. После установки нужен перезапуск: плагин подхватывается при старте сессии.
 
 В десктопном приложении: + рядом с полем ввода → Plugins → Add marketplace `maksutovnurda/claude-context-bar` → Add plugin.
 
